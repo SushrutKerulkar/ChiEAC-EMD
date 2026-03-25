@@ -5,7 +5,10 @@ Streamlit frontend
 
 import streamlit as st
 import os
+import io
 import pandas as pd
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 from analyzer import load_dataset, generate_all_charts, build_data_summary
 from explainer import explain_dataset, explain_chart, answer_question
@@ -64,6 +67,24 @@ st.markdown("""
 # ── Load API key from .env ─────────────────────────────────────────────────────
 api_key = os.environ.get("GROQ_API_KEY", "")
 
+# ── S3 upload helper ───────────────────────────────────────────────────────────
+def upload_to_s3(file_obj, filename: str) -> bool:
+    """Upload a file-like object to S3. Returns True on success."""
+    try:
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        )
+        bucket = os.environ.get("S3_BUCKET", "explain-my-data-project-bucket")
+        buf = io.BytesIO(file_obj.read())
+        s3.upload_fileobj(buf, bucket, filename)
+        return True
+    except (BotoCoreError, ClientError) as e:
+        st.warning(f"S3 upload failed: {e}")
+        return False
+
 
 
 # ── Header ─────────────────────────────────────────────────────────────────────
@@ -90,6 +111,17 @@ uploaded_file = st.file_uploader(
 if not uploaded_file:
     st.info("Upload a dataset above to get started.")
     st.stop()
+
+# Upload to S3 once per file (tracked in session state)
+s3_upload_key = f"s3_uploaded_{uploaded_file.name}"
+if s3_upload_key not in st.session_state:
+    with st.spinner("Uploading file to S3..."):
+        s3_key = f"csv/{uploaded_file.name}"
+        success = upload_to_s3(uploaded_file, s3_key)
+    if success:
+        st.success(f"Uploaded **{uploaded_file.name}** to S3 (`csv/` folder).")
+    uploaded_file.seek(0)  # reset so downstream readers can still read the file
+    st.session_state[s3_upload_key] = True
 
 if not api_key:
     st.error("ANTHROPIC_API_KEY not found. Add it to your .env file and restart the app.")
