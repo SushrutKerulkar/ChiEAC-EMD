@@ -124,7 +124,7 @@ if s3_upload_key not in st.session_state:
     st.session_state[s3_upload_key] = True
 
 if not api_key:
-    st.error("ANTHROPIC_API_KEY not found. Add it to your .env file and restart the app.")
+    st.error("GROQ_API_KEY not found. Add it to your .env file and restart the app.")
     st.stop()
 
 
@@ -244,7 +244,7 @@ with tab_charts:
 with tab_qa:
     st.subheader("Ask Anything About Your Data")
     st.markdown(
-        "Ask free-form questions — Claude will answer based on your dataset summary."
+        "Ask free-form questions — Groq will answer based on your dataset summary."
     )
 
     if "qa_history" not in st.session_state:
